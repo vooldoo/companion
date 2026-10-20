@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b1722">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Companion</title>
 <style>
 :root{--bg:#1b1722;--card:#262031;--me:#7a3b69;--ai:#322a40;--tx:#f3eef7;--mut:#a79bb8;--ac:#e08ab4;--ln:#3a3149}
@@ -172,6 +176,7 @@ function send(){var t=$('inp').value.trim();if(!t||busy)return;find(cur).msgs.pu
 function regen(){var c=find(cur);if(c.msgs.length&&c.msgs[c.msgs.length-1].role==='assistant'){c.msgs.pop();gen()}}
 $('inp').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey&&window.innerWidth>700){e.preventDefault();send()}});
 load();go('list');
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
 </script>
 </body>
 </html>
