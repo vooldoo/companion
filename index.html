@@ -18,7 +18,7 @@ body{background:var(--bg);color:var(--tx);font:16px/1.45 Georgia,'Times New Roma
 button,input,textarea,select{font:inherit;color:inherit}
 .app{height:100%;display:flex;flex-direction:column;max-width:720px;margin:0 auto}
 header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--ln)}
-header h1{font-size:18px;margin:0;flex:1}
+header h1{font-size:18px;margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .btn{background:var(--ac);color:#fff;border:0;border-radius:10px;padding:9px 14px;cursor:pointer}
 .btn.ghost{background:transparent;color:var(--tx);border:1px solid var(--ln)}
 .btn.sm{padding:5px 10px;font-size:14px}
@@ -48,6 +48,7 @@ textarea.f{min-height:90px}
     <button class="btn ghost sm" id="back" onclick="go('list')">←</button>
     <img class="ava hide" id="hAva" alt="">
     <h1 id="title">Персонажи</h1>
+    <button class="btn ghost sm" id="hNew" onclick="resetChat()">Новый чат</button>
     <button class="btn ghost sm" id="hEdit" onclick="editChar(cur)">Правка</button>
     <button class="btn ghost sm" onclick="go('set')">⚙</button>
   </header>
@@ -90,13 +91,21 @@ textarea.f{min-height:90px}
     <label>Максимум токенов в ответе</label><input type="number" id="sMax" step="50">
     <button class="btn" style="margin-top:16px" onclick="saveSet()">Сохранить</button>
     <p class="hint">Подойдёт любой сервер с OpenAI-форматом: llama.cpp server, Ollama, LM Studio, KoboldCpp, OpenRouter и др. Модель выбираешь сам(а).</p>
+    <h3 style="margin-top:28px">Резервные копии</h3>
+    <label>Адрес помощника в Termux</label><input type="text" id="sBak" placeholder="http://localhost:8081">
+    <p class="hint" id="bakSt">Копии сохраняются автоматически в папку Companion на телефоне, пока в Termux запущен backup_server.py.</p>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn ghost sm" onclick="doBackup()">Сохранить копию сейчас</button>
+      <button class="btn ghost sm" onclick="exportData()">Экспорт в файл</button>
+      <label class="btn ghost sm" style="margin:0">Импорт из файла<input type="file" id="impF" accept=".json" hidden></label>
+    </div>
   </div>
 </div>
 
 <script>
-var S={url:'',key:'',model:'',temp:0.9,max:400},chars=[],cur=null,view='list',busy=false;
+var S={bak:'http://localhost:8081',url:'',key:'',model:'',temp:0.9,max:400},chars=[],cur=null,view='list',busy=false;
 function load(){try{var a=localStorage.getItem('cc_s');if(a)S=Object.assign(S,JSON.parse(a));var b=localStorage.getItem('cc_c');if(b)chars=JSON.parse(b)}catch(e){}}
-function save(){try{localStorage.setItem('cc_s',JSON.stringify(S));localStorage.setItem('cc_c',JSON.stringify(chars))}catch(e){showErr('Не удалось сохранить: мало места (фото слишком большое?)')}}
+function save(){try{localStorage.setItem('cc_s',JSON.stringify(S));localStorage.setItem('cc_c',JSON.stringify(chars))}catch(e){showErr('Не удалось сохранить: мало места (фото слишком большое?)')}scheduleBackup()}
 function $(i){return document.getElementById(i)}
 function find(id){return chars.find(function(c){return c.id===id})}
 function showErr(t){var e=$('err');e.textContent=t;e.classList.toggle('hide',!t)}
@@ -105,13 +114,13 @@ function go(v,id){
   ['list','chat','edit','set'].forEach(function(x){$(x).classList.toggle('hide',x!==v)});
   $('comp').classList.toggle('hide',v!=='chat');
   $('back').classList.toggle('hide',v==='list');
-  $('hEdit').classList.toggle('hide',v!=='chat');
+  $('hEdit').classList.toggle('hide',v!=='chat');$('hNew').classList.toggle('hide',v!=='chat');
   var c=find(cur);
   $('hAva').classList.toggle('hide',v!=='chat');
   $('title').textContent=v==='chat'&&c?c.name:v==='set'?'Настройки':v==='edit'?'Персонаж':'Персонажи';
   if(v==='chat'&&c){$('hAva').src=c.ava||'';renderChat()}
   if(v==='list')renderList();
-  if(v==='set'){$('sUrl').value=S.url;$('sKey').value=S.key;$('sModel').value=S.model;$('sTemp').value=S.temp;$('sMax').value=S.max}
+  if(v==='set'){$('sBak').value=S.bak||'http://localhost:8081';$('sUrl').value=S.url;$('sKey').value=S.key;$('sModel').value=S.model;$('sTemp').value=S.temp;$('sMax').value=S.max}
 }
 function avaHtml(c){return c.ava?'<img class="ava" src="'+c.ava+'" alt="">':'<div class="ava">'+esc((c.name||'?')[0])+'</div>'}
 function esc(s){return String(s).replace(/[&<>"]/g,function(m){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]})}
@@ -155,7 +164,7 @@ function saveChar(){
 }
 function delChar(){if(confirm('Удалить персонажа и чат?')){chars=chars.filter(function(c){return c.id!==cur});cur=null;save();go('list')}}
 function resetChat(){if(confirm('Очистить переписку?')){var c=find(cur);c.msgs=c.first?[{role:'assistant',content:c.first}]:[];save();go('chat')}}
-function saveSet(){S.url=$('sUrl').value.trim().replace(/\/+$/,'');S.key=$('sKey').value;S.model=$('sModel').value.trim();S.temp=parseFloat($('sTemp').value)||0.9;S.max=parseInt($('sMax').value)||400;save();go(cur?'chat':'list')}
+function saveSet(){S.bak=$('sBak').value.trim();S.url=$('sUrl').value.trim().replace(/\/+$/,'');S.key=$('sKey').value;S.model=$('sModel').value.trim();S.temp=parseFloat($('sTemp').value)||0.9;S.max=parseInt($('sMax').value)||400;save();go(cur?'chat':'list')}
 function buildMsgs(c){
   var sys='Ты играешь роль персонажа '+c.name+'. Это вымышленная ролевая игра между взрослыми.\n'+c.prompt+(c.scen?'\nСценарий: '+c.scen:'')+'\nНе выходи из роли.';
   return [{role:'system',content:sys}].concat(c.msgs.map(function(m){return{role:m.role,content:m.content}}));
@@ -175,7 +184,28 @@ async function gen(){
 function send(){var t=$('inp').value.trim();if(!t||busy)return;find(cur).msgs.push({role:'user',content:t});$('inp').value='';renderChat();gen()}
 function regen(){var c=find(cur);if(c.msgs.length&&c.msgs[c.msgs.length-1].role==='assistant'){c.msgs.pop();gen()}}
 $('inp').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey&&window.innerWidth>700){e.preventDefault();send()}});
-load();go('list');
+function bakUrl(){return (S.bak||'http://localhost:8081').replace(/\/+$/,'')}
+function bakSt(t){var e=$('bakSt');if(e)e.textContent=t}
+function scheduleBackup(){clearTimeout(window._bt);window._bt=setTimeout(doBackup,1500)}
+async function doBackup(){
+  try{var r=await fetch(bakUrl()+'/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chars:chars,s:S})});
+    bakSt(r.ok?'Копия сохранена в '+new Date().toLocaleTimeString():'Ошибка при сохранении копии')}
+  catch(e){bakSt('Помощник не запущен: копия не сохранена. Запусти backup_server.py в Termux.')}
+}
+function applyData(d){if(d&&Array.isArray(d.chars)){chars=d.chars;if(d.s)S=Object.assign(S,d.s);save();go('list');return true}return false}
+async function tryRestore(){
+  if(chars.length)return;
+  try{var r=await fetch(bakUrl()+'/data');var d=await r.json();
+    if(d&&d.chars&&d.chars.length&&confirm('Найдена копия: персонажей '+d.chars.length+'. Восстановить?'))applyData(d)}catch(e){}
+}
+function exportData(){
+  var b=new Blob([JSON.stringify({chars:chars,s:S})],{type:'application/json'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download='companion-backup.json';document.body.appendChild(a);a.click();a.remove();
+}
+$('impF').onchange=function(e){var f=e.target.files[0];if(!f)return;var r=new FileReader();
+  r.onload=function(){try{if(confirm('Заменить текущие данные данными из файла?')&&!applyData(JSON.parse(r.result)))alert('Файл не подходит')}catch(x){alert('Не удалось прочитать файл')}};r.readAsText(f)};
+try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
+load();go('list');tryRestore();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
 </script>
 </body>
